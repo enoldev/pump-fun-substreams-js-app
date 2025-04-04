@@ -1,13 +1,12 @@
 'use client'
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useState } from "react";
 import { startSubstreams } from "../substreams/main";
 import type { BlockScopedData, BlockUndoSignal, ModulesProgress } from '@substreams/core/proto';
 import { type IMessageTypeRegistry } from "@bufbuild/protobuf";
-import { getCursor, writeCursor } from "@/substreams/cursor";
 import { Handlers } from "@/substreams/types";
-import { SPKG, TOKEN } from "@/substreams/constants";
+import { TOKEN } from "@/substreams/constants";
 import { LineChart, Line, CartesianGrid, XAxis, YAxis } from 'recharts';
 import "./page.css";
 
@@ -17,9 +16,18 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   const [token, setToken] = useState<string | null>("7VR8w5qGc5mYcdscznMChDMdRHBeogko5TWCeDgZpump");
-  const [startBlock, setStartBlock] = useState<number | null>(300870776);
-  const [priceHistory, setPriceHistory] = useState<number[]>([]);
+  const [startBlock, setStartBlock] = useState<number | null>(300870910);
+  const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const [streamStarted, setStreamStarted] = useState<boolean>(false);
+  const [currentBlock, setCurrentBlock] = useState<bigint | null>(null);
+  const priceRef = useRef(null);
+  const latestPriceHistoryRef = useRef(null);
+
+  useEffect(() => {
+    if (priceHistory.length > 0) {
+      latestPriceHistoryRef.current = priceHistory[priceHistory.length - 1];
+    }
+  }, [priceHistory])
 
   /*
     Receive data from the Substreams
@@ -28,6 +36,7 @@ export default function Home() {
     const output = response.output?.mapOutput;
     // IN PRODUCTION, commit the cursor of the stream.
     const cursor = response.cursor;
+    setCurrentBlock(response.finalBlockHeight);
 
     if (output !== undefined) {
       const message = output.unpack(registry);
@@ -42,6 +51,7 @@ export default function Home() {
       const obj = JSON.parse(outputAsJson)
 
       // Iterate over all the TradeEvents of Pump.fun.
+      let priceAssignment = null;
       if (obj['tradeEventList'] !== null && obj['tradeEventList'] !== undefined) {
         for (let i = 0; i < obj['tradeEventList'].length; i++) {
           const tradeEvent = obj['tradeEventList'][i]
@@ -50,11 +60,42 @@ export default function Home() {
           }
 
           const price = tradeEvent.solAmount / parseFloat(tradeEvent.tokenAmount)
-          console.log(price)
-          setPriceHistory((prev) => [...prev, price])
+
+          priceAssignment = price;
         }
       }
+
+      addToPriceHistory(response.finalBlockHeight, priceAssignment)
     }
+  }
+
+  const addToPriceHistory = (block: bigint, price: number | null) => {
+    let ph;
+    if (price !== null) {
+      ph = {
+        block,
+        price
+      }
+
+      if (priceRef.current) {
+        priceRef.current.style.color = "#f9d10a"
+
+        setTimeout(() => {
+          priceRef.current.style.color = "white"
+        }, 200)
+      }
+    } else {
+      if (!latestPriceHistoryRef.current) {
+        return
+      }
+
+      ph = {
+        block,
+        price: latestPriceHistoryRef.current.price
+      }
+    }
+
+    setPriceHistory((prev) => [...prev, ph])
   }
 
   const blockUndoSignalHandler = (response: BlockUndoSignal) => {
@@ -96,7 +137,7 @@ export default function Home() {
   }
 
   return (
-    <div style={{ width: '100%', margin: '0 auto', borderRadius: '6px 6px 6px 6px', backgroundColor: '#0a0817' }}>
+    <div style={{ width: '100%', margin: '0 auto', borderRadius: '6px 6px 6px 6px', backgroundColor: '#0a0817', height: '100%' }}>
       <div style={{ padding: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <div><img src="https://staging.substreams.dev/static/images/substreams_logo_white.svg" width={300} /></div>
@@ -113,7 +154,7 @@ export default function Home() {
               <div style={{ fontSize: '20px', fontWeight: 'bold' }}>Start Block</div>
               <div><input type="text" onChange={e => setStartBlock(parseInt(e.target.value))} value={startBlock} style={{ width: '100%' }} /></div>
             </div>
-            <div><button onClick={clickStreamButton}>Stream!</button></div>
+            <div style={{ width: '100%', textAlign: 'center', marginTop: '5px' }}><button onClick={clickStreamButton} style={{ margin: '0 auto' }}>Stream!</button></div>
           </div>
         </div>
         <div style={{ width: '100%', margin: '0 auto', maxWidth: '900px' }}>
@@ -125,18 +166,23 @@ export default function Home() {
             </div>
           </div>
           <div style={{ textAlign: 'center', marginTop: '7px' }}>
+            <span style={{ fontSize: '26px', fontWeight: 'bold' }}>Latest Block: </span>
+            {currentBlock === null && <i>-</i>}
+            {currentBlock != null && <b>{currentBlock.toString()}</b>}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '7px' }}>
             <span style={{ fontSize: '26px', fontWeight: 'bold' }}>Latest Price: </span>
             {priceHistory.length === 0 && <i>Waiting for Price...</i>}
-            {priceHistory.length > 0 && <b>{priceHistory[priceHistory.length - 1]}</b>}
+            {priceHistory.length > 0 && <b ref={priceRef}>{priceHistory[priceHistory.length - 1].price}</b>}
           </div>
-          <LineChart width={900} height={400} style={{ width: '100%', margin: '0 auto' }} data={priceHistory.map((idx, price) => {
-            return { 'name': 'Token', 'uv': idx, pv: price }
-          })}>
+          {priceHistory.length > 0 && <LineChart width={900} height={400} style={{ width: '100%', margin: '0 auto' }} data={priceHistory.map((ph, idx) => {
+            return { 'name': ph.block.toString(), 'uv': ph.price, 'pv': idx }
+          })}>''
             <Line type="monotone" dataKey="uv" stroke="#8884d8" />
-            <CartesianGrid stroke="#ccc" />
+            <CartesianGrid stroke="#ccc" vertical={false} />
             <XAxis dataKey="name" />
-            <YAxis />
-          </LineChart>
+            <YAxis width={100} domain={['auto', 'auto']} />
+          </LineChart>}
         </div>
       </div>
     </div>

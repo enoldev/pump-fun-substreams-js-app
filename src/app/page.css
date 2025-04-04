@@ -1,5 +1,5 @@
 body {
-    background-color: white;
+    background-color: #0a0817;
     color: white;
     font-family: "EuclidCircularA", sans-serif;
 }
@@ -9,5 +9,20 @@ body {
     width: 100%;
     margin: 0 auto;
     border-color: #e5e7eb;
+}
 
+input {
+    padding: 10px;
+    border: 1px solid grey;
+    border-radius: 5px 5px 5px 5px;
+}
+
+button {
+    color: rgb(50, 50, 50);
+    padding: 10px;
+    border: 1px solid grey;
+    border-radius: 5px 5px 5px 5px;
+    font-family: Arial;
+    font-size: 17px;
+    margin-top: 7px;
 }
